@@ -1,0 +1,95 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light dark;
+  }
+  html, body, #root { height: 100%; }
+  body {
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    overscroll-behavior-y: none;
+  }
+  /* Beautiful selection colour for both themes */
+  ::selection {
+    background-color: rgba(112, 72, 232, 0.25);
+    color: inherit;
+  }
+}
+
+@layer components {
+  .glass {
+    @apply bg-white/70 backdrop-blur-xl backdrop-saturate-150 border border-ink-200/60 shadow-soft;
+  }
+  .dark .glass {
+    @apply bg-ink-900/70 border-ink-700/60;
+  }
+
+  .pill {
+    @apply inline-flex items-center gap-1 rounded-full border border-ink-200 bg-white/80 px-2 py-0.5 text-[11px] font-medium text-ink-600;
+  }
+  .dark .pill {
+    @apply border-ink-700 bg-ink-800/60 text-ink-200;
+  }
+
+  .focus-ring {
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violetx-500/70 focus-visible:ring-offset-2 focus-visible:ring-offset-canvas-light dark:focus-visible:ring-offset-canvas-dark;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-br from-violetx-500 to-violetx-700 px-4 py-2 text-sm font-semibold text-white shadow-glow transition-all duration-200 ease-snap hover:brightness-110 active:scale-[0.98] focus-ring;
+  }
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-ink-700 transition-all duration-150 ease-smooth hover:bg-ink-100 active:scale-[0.98] focus-ring dark:text-ink-200 dark:hover:bg-ink-800/60;
+  }
+  .btn-outline {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-ink-200 bg-white/70 px-3 py-2 text-sm font-medium text-ink-700 transition-all duration-150 ease-smooth hover:bg-white active:scale-[0.98] focus-ring dark:border-ink-700 dark:bg-ink-900/70 dark:text-ink-200 dark:hover:bg-ink-800/60;
+  }
+
+  .field-input {
+    @apply block w-full rounded-xl border border-ink-200 bg-white/80 px-3.5 py-2.5 text-sm text-ink-900 placeholder:text-ink-400 transition focus:border-violetx-400 focus:outline-none focus:ring-4 focus:ring-violetx-500/15 dark:border-ink-700 dark:bg-ink-900/70 dark:text-ink-100 dark:placeholder:text-ink-500;
+  }
+
+  .card-surface {
+    @apply rounded-2xl border border-ink-200/70 bg-white/80 shadow-soft transition-all duration-200 ease-snap dark:border-ink-700/60 dark:bg-ink-900/60;
+  }
+
+  .skeleton {
+    @apply relative overflow-hidden rounded-xl bg-ink-100 dark:bg-ink-800;
+  }
+  .skeleton::after {
+    content: '';
+    @apply absolute inset-0 bg-gradient-to-r from-transparent via-white/50 to-transparent dark:via-ink-700/50;
+    animation: shimmer 1.4s infinite;
+    background-size: 200% 100%;
+  }
+}
+
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(99 102 122 / 0.4) transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar { width: 8px; height: 8px; }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: rgba(99,102,122,.35);
+    border-radius: 999px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background: rgba(99,102,122,.6);
+  }
+  .text-balance { text-wrap: balance; }
+  .grid-bg-light {
+    background-image: radial-gradient(circle at 1px 1px, rgba(15,18,38,.08) 1px, transparent 0);
+    background-size: 22px 22px;
+  }
+  .grid-bg-dark {
+    background-image: radial-gradient(circle at 1px 1px, rgba(255,255,255,.06) 1px, transparent 0);
+    background-size: 22px 22px;
+  }
+}
+
+/* Excalidraw container fills its parent — required for our editor wrapper. */
+.excalidraw .excalidraw-wrapper { height: 100% !important; }

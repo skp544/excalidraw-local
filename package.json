@@ -1,0 +1,31 @@
+{
+  "name": "excalidrow",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Personal premium-quality whiteboard — self-hosted, local-first, Excalidraw-powered.",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm-run-all --parallel dev:api dev:web",
+    "dev:api": "npm --workspace @excalidrow/api run dev",
+    "dev:web": "npm --workspace @excalidrow/web run dev",
+    "build": "npm-run-all --serial build:web build:api",
+    "build:api": "npm --workspace @excalidrow/api run build",
+    "build:web": "npm --workspace @excalidrow/web run build",
+    "start": "npm --workspace @excalidrow/api run start",
+    "lint": "npm-run-all --parallel lint:api lint:web",
+    "lint:api": "npm --workspace @excalidrow/api run lint",
+    "lint:web": "npm --workspace @excalidrow/web run lint",
+    "clean": "rimraf node_modules apps/*/node_modules packages/*/node_modules apps/*/dist"
+  },
+  "devDependencies": {
+    "npm-run-all": "^4.1.5",
+    "rimraf": "^5.0.10"
+  },
+  "engines": {
+    "node": ">=18.18.0",
+    "npm": ">=9.0.0"
+  }
+}

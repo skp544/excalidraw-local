@@ -1,0 +1,20 @@
+node_modules
+dist
+build
+coverage
+*.log
+.DS_Store
+.env
+.env.*
+!.env.example
+.vite
+*.local
+
+# Local data
+uploads/boards/*
+uploads/images/*
+uploads/exports/*
+uploads/thumbnails/*
+!uploads/.gitkeep
+!uploads/**/.gitkeep
+data/
