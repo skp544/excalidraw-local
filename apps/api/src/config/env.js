@@ -25,7 +25,7 @@ const int = (name, fallback) => {
 export const env = Object.freeze({
   NODE_ENV: process.env.NODE_ENV ?? 'development',
   IS_PROD: process.env.NODE_ENV === 'production',
-  PORT: int('PORT', 4000),
+  PORT: int('PORT', 7051),
 
   MONGO_URI: process.env.MONGO_URI ?? 'mongodb://127.0.0.1:27017/excalidrow',
 
@@ -34,7 +34,7 @@ export const env = Object.freeze({
   JWT_ACCESS_TTL: process.env.JWT_ACCESS_TTL ?? '15m',
   JWT_REFRESH_TTL: process.env.JWT_REFRESH_TTL ?? '30d',
 
-  WEB_ORIGIN: process.env.WEB_ORIGIN ?? 'http://localhost:5173',
+  WEB_ORIGIN: process.env.WEB_ORIGIN ?? 'http://localhost:7001',
 
   UPLOAD_ROOT: path.resolve(
     __dirname,

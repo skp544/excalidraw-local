@@ -15,7 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 npm install
 
 # Dev (runs api + web in parallel via npm-run-all)
-npm run dev                         # api → :4000, web → :5173
+npm run dev                         # api → :7051, web → :7001
 
 # Either side individually
 npm --workspace @excalidrow/api run dev
@@ -28,13 +28,13 @@ npm --workspace @excalidrow/web run build
 npm --workspace @excalidrow/api run seed
 
 # Health check
-curl http://localhost:4000/healthz
-curl http://localhost:4000/api/v1/health
+curl http://localhost:7051/healthz
+curl http://localhost:7051/api/v1/health
 ```
 
 There are no tests configured. Lint scripts (`npm run lint`) exist as placeholders but ESLint is not configured — they intentionally don't fail.
 
-The web app proxies `/api`, `/uploads`, and `/socket.io` to `:4000` via `vite.config.js`, so during dev everything works on a single origin.
+The web app proxies `/api`, `/uploads`, and `/socket.io` to `:7051` via `vite.config.js`, so during dev everything works on a single origin.
 
 ## Architecture in 60 seconds
 

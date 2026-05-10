@@ -138,9 +138,9 @@ This boots:
 
 | Service | URL                       |
 |---------|---------------------------|
-| API     | http://localhost:4000     |
-| Web     | http://localhost:5173     |
-| Health  | http://localhost:4000/healthz |
+| API     | http://localhost:7051     |
+| Web     | http://localhost:7001     |
+| Health  | http://localhost:7051/healthz |
 
 The Vite dev server proxies `/api`, `/uploads` and `/socket.io` to the API, so everything works on a single origin during development.
 

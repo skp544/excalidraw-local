@@ -26,20 +26,20 @@ export default defineConfig({
     },
   },
   server: {
-    port: Number(process.env.WEB_PORT ?? 5173),
+    port: Number(process.env.WEB_PORT ?? 7001),
     strictPort: true,
     host: true,
     proxy: {
       '/api': {
-        target: process.env.VITE_API_URL ?? 'http://localhost:4000',
+        target: process.env.VITE_API_URL ?? 'http://localhost:7051',
         changeOrigin: true,
       },
       '/uploads': {
-        target: process.env.VITE_API_URL ?? 'http://localhost:4000',
+        target: process.env.VITE_API_URL ?? 'http://localhost:7051',
         changeOrigin: true,
       },
       '/socket.io': {
-        target: process.env.VITE_SOCKET_URL ?? 'http://localhost:4000',
+        target: process.env.VITE_SOCKET_URL ?? 'http://localhost:7051',
         ws: true,
         changeOrigin: true,
       },
