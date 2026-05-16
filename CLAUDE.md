@@ -1,3 +1,5 @@
+<!-- claude --resume "excalidraw-app" -->
+
 # CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
@@ -50,6 +52,7 @@ uploads/    boards/ images/ exports/ thumbnails/   — Express serves these stat
 `server.js` → `connectMongo` + `ensureStorageDirs` → `createApp` (Express factory in `app.js`) → `attachSockets` (HTTP server + Socket.IO).
 
 Every API route lives under `/api/v1/*`, mounted in `routes/index.js`. The pattern is:
+
 1. `routes/<resource>.routes.js` declares the surface and applies `requireAuth` + `validate({ body|query|params })` middleware.
 2. `controllers/<resource>.controller.js` wraps each handler in `asyncHandler` and throws `HttpError.*` for failure cases.
 3. `services/<thing>.service.js` holds anything reused across controllers (auth tokens, storage, activity logging).
@@ -63,7 +66,7 @@ Every API route lives under `/api/v1/*`, mounted in `routes/index.js`. The patte
 
 ### Editor + autosave + Yjs
 
-- The editor lives in `apps/web/src/pages/BoardEditorPage.jsx`. **The drawing canvas is locked to `theme="light"`, `viewBackgroundColor: '#FFFFFF'`, `gridSize: null`, and `currentItemStrokeColor: '#000000'`.** These are forced *after* the saved appState spread — the user explicitly wants a plain white page with black strokes regardless of saved state or app theme. Don't reintroduce the dot grid or theme-coupled canvas colors.
+- The editor lives in `apps/web/src/pages/BoardEditorPage.jsx`. **The drawing canvas is locked to `theme="light"`, `viewBackgroundColor: '#FFFFFF'`, `gridSize: null`, and `currentItemStrokeColor: '#000000'`.** These are forced _after_ the saved appState spread — the user explicitly wants a plain white page with black strokes regardless of saved state or app theme. Don't reintroduce the dot grid or theme-coupled canvas colors.
 - `useAutosave` in `apps/web/src/features/editor/useAutosave.js` debounces scene changes (1.2s), flushes on unmount, and uses `navigator.sendBeacon` on `beforeunload`. Every ~30s during edits it captures a webp thumbnail via Excalidraw's `exportToBlob` and uploads it to the board.
 - Page version history is capped at 25 entries in `controllers/page.controller.js:updatePage`. A new version is only inserted if the element-payload size differs from the last by >4KB — most autosaves don't create a checkpoint.
 - Realtime: `sockets/index.js` authenticates via the same access token and joins clients into `room:<boardId>:<pageId>`. `yjs-store.js` rehydrates a `Y.Doc` from `pages.yDoc` (base64) on first join, applies remote updates, and debounce-persists state back. **Today the app is single-user — collaboration is wired end-to-end and works the moment a second tab joins.**

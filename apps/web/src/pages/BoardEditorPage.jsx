@@ -24,6 +24,7 @@ import {
   useDeletePage,
   useToggleFavorite,
   useUpdateBoard,
+  useUpdatePage,
 } from '@/hooks/use-boards.js';
 import { useHotkeys } from '@/hooks/use-hotkeys.js';
 import { useAutosave } from '@/features/editor/useAutosave.js';
@@ -55,6 +56,7 @@ export function BoardEditorPage() {
 
   const createPage = useCreatePage();
   const deletePage = useDeletePage();
+  const updatePage = useUpdatePage();
   const updateBoard = useUpdateBoard();
   const toggleFav = useToggleFavorite();
 
@@ -127,6 +129,14 @@ export function BoardEditorPage() {
         if (next) setActivePageId(next.id);
       }
       toast.success('Page deleted');
+    } catch (err) {
+      toast.error(apiError(err));
+    }
+  };
+
+  const onRenamePage = async (pageId, title) => {
+    try {
+      await updatePage.mutateAsync({ boardId, pageId, title });
     } catch (err) {
       toast.error(apiError(err));
     }
@@ -300,6 +310,7 @@ export function BoardEditorPage() {
           onSelect={setActivePageId}
           onAdd={onAddPage}
           onDelete={onDeletePage}
+          onRename={onRenamePage}
         />
         {createPage.isPending && (
           <span className="px-2 text-[11px] text-ink-500">
