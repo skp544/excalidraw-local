@@ -13,9 +13,7 @@ export const listActivity = asyncHandler(async (req, res) => {
 });
 
 export const listNotifications = asyncHandler(async (req, res) => {
-  const items = await Notification.find({ userId: req.user.id })
-    .sort({ createdAt: -1 })
-    .limit(50);
+  const items = await Notification.find({ userId: req.user.id }).sort({ createdAt: -1 }).limit(50);
   res.json({ items: items.map((n) => n.toJSONResponse()) });
 });
 

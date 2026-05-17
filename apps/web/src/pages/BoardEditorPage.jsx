@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Excalidraw, MainMenu } from '@excalidraw/excalidraw';
 import toast from 'react-hot-toast';
 import { motion } from 'framer-motion';
@@ -36,6 +36,7 @@ import { cn } from '@/lib/cn.js';
 export function BoardEditorPage() {
   const { id: boardId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const { data: boardData, isLoading: boardLoading, error: boardError } = useBoard(boardId);
   const board = boardData?.board ?? null;
@@ -45,8 +46,14 @@ export function BoardEditorPage() {
   );
 
   const [activePageId, setActivePageId] = useState(null);
+  const requestedPageId = useRef(location.state?.pageId ?? null);
   useEffect(() => {
-    if (pages.length && !pages.find((p) => p.id === activePageId)) {
+    if (!pages.length) return;
+    const requested = requestedPageId.current;
+    if (requested && pages.find((p) => p.id === requested)) {
+      setActivePageId(requested);
+      requestedPageId.current = null;
+    } else if (!pages.find((p) => p.id === activePageId)) {
       setActivePageId(pages[0].id);
     }
   }, [pages, activePageId]);
@@ -309,14 +316,22 @@ export function BoardEditorPage() {
           activePageId={activePageId}
           onSelect={setActivePageId}
           onAdd={onAddPage}
-          onDelete={onDeletePage}
           onRename={onRenamePage}
         />
-        {createPage.isPending && (
-          <span className="px-2 text-[11px] text-ink-500">
-            <Loader2 className="inline h-3 w-3 animate-spin" /> adding page…
-          </span>
-        )}
+        <div className="flex items-center gap-2 pl-2">
+          {createPage.isPending && (
+            <span className="text-[11px] text-ink-500">
+              <Loader2 className="inline h-3 w-3 animate-spin" /> adding…
+            </span>
+          )}
+          <button
+            onClick={() => navigate(`/board/${boardId}/pages`)}
+            className="rounded-lg px-2.5 py-1 text-[11px] font-medium text-ink-500 transition hover:bg-ink-100 hover:text-ink-700 dark:text-ink-400 dark:hover:bg-ink-800 dark:hover:text-ink-100"
+            title="Manage pages"
+          >
+            Manage pages
+          </button>
+        </div>
       </div>
 
       {/* Canvas */}

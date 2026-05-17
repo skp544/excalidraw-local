@@ -9,10 +9,14 @@ import { relativeTime } from '@excalidrow/shared/utils';
 export function BoardCard({ board, onToggleFavorite, onDuplicate, onDelete, view = 'grid' }) {
   const [menuOpen, setMenuOpen] = useState(false);
 
+  const to = (board.pageCount ?? 1) > 1
+    ? `/board/${board.id}/pages`
+    : `/board/${board.id}`;
+
   if (view === 'list') {
     return (
       <li className="group flex items-center gap-3 rounded-xl border border-ink-200/70 bg-white/80 px-3 py-2.5 shadow-soft transition hover:border-violetx-200 hover:bg-white dark:border-ink-700/60 dark:bg-ink-900/60 dark:hover:border-violetx-500/40">
-        <Link to={`/board/${board.id}`} className="flex flex-1 items-center gap-3 truncate">
+        <Link to={to} className="flex flex-1 items-center gap-3 truncate">
           <ThumbPreview board={board} size="sm" />
           <div className="min-w-0 flex-1">
             <div className="truncate font-medium">{board.title || 'Untitled'}</div>
@@ -44,7 +48,7 @@ export function BoardCard({ board, onToggleFavorite, onDuplicate, onDelete, view
       className="group relative"
     >
       <Link
-        to={`/board/${board.id}`}
+        to={to}
         className="block overflow-hidden rounded-2xl border border-ink-200/70 bg-white/85 shadow-soft transition focus-ring dark:border-ink-700/60 dark:bg-ink-900/60"
       >
         <ThumbPreview board={board} />

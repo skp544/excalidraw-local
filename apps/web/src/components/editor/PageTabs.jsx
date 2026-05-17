@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Plus, X } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { cn } from '@/lib/cn.js';
 
-export function PageTabs({ pages = [], activePageId, onSelect, onAdd, onDelete, onRename }) {
+export function PageTabs({ pages = [], activePageId, onSelect, onAdd, onRename }) {
   const [editingId, setEditingId] = useState(null);
   const [editingValue, setEditingValue] = useState('');
   const inputRef = useRef(null);
@@ -65,18 +65,6 @@ export function PageTabs({ pages = [], activePageId, onSelect, onAdd, onDelete, 
                 title="Double-click to rename"
               >
                 {p.title || 'Untitled'}
-              </span>
-            )}
-
-            {pages.length > 1 && !editing && (
-              <span
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDelete?.(p.id);
-                }}
-                className="rounded p-0.5 opacity-0 transition group-hover:opacity-100"
-              >
-                <X className="h-3 w-3" />
               </span>
             )}
 
