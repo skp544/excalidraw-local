@@ -210,7 +210,7 @@ export function BoardEditorPage() {
   return (
     <div className="relative flex h-full flex-col bg-canvas-light dark:bg-canvas-dark">
       {/* Top bar */}
-      <header className="z-10 flex items-center gap-3 border-b border-ink-200/70 bg-white/80 px-4 py-2 backdrop-blur-xl dark:border-ink-800 dark:bg-ink-900/70">
+      <header className="z-20 flex items-center gap-3 border-b border-ink-200/70 bg-white/80 px-4 py-2 backdrop-blur-xl dark:border-ink-800 dark:bg-ink-900/70">
         <button
           onClick={() => navigate('/')}
           className="grid h-9 w-9 place-items-center rounded-xl text-ink-500 transition hover:bg-ink-100 dark:hover:bg-ink-800"
