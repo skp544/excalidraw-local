@@ -54,6 +54,11 @@ export const updateFolder = asyncHandler(async (req, res) => {
 export const deleteFolder = asyncHandler(async (req, res) => {
   const folder = await Folder.findOneAndDelete({ _id: req.params.id, ownerId: req.user.id });
   if (!folder) throw HttpError.notFound('Folder not found');
+  // Promote direct child folders to root rather than orphaning them.
+  await Folder.updateMany(
+    { parentId: folder._id, ownerId: req.user.id },
+    { $set: { parentId: null } },
+  );
   // Detach boards rather than cascading delete.
   await Board.updateMany(
     { folderId: folder._id, ownerId: req.user.id },

@@ -1,15 +1,19 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import toast from 'react-hot-toast';
 import {
-  Home, Star, Archive, Layers, Sparkles, Plus, Folder, Search, Settings,
-  ChevronsLeft, ChevronsRight, BookTemplate,
+  Home, Star, Archive, Layers, Sparkles, Plus, Folder, FolderOpen,
+  Search, Settings, ChevronsLeft, ChevronsRight, BookTemplate,
+  ChevronRight, MoreHorizontal, Pencil, Trash2, FolderInput, FolderUp,
 } from 'lucide-react';
 
 import { Logo } from '@/components/ui/Logo.jsx';
 import { Button } from '@/components/ui/Button.jsx';
 import { useUIStore } from '@/stores/ui-store.js';
-import { useFolders } from '@/hooks/use-boards.js';
+import {
+  useFolders, useCreateFolder, useUpdateFolder, useDeleteFolder,
+} from '@/hooks/use-boards.js';
 import { cn } from '@/lib/cn.js';
 
 const NAV = [
@@ -19,6 +23,21 @@ const NAV = [
   { to: '/templates', icon: BookTemplate, label: 'Templates' },
   { to: '/activity', icon: Layers, label: 'Activity' },
 ];
+
+function getDescendantIds(folderId, folders) {
+  const result = new Set();
+  const queue = [folderId];
+  while (queue.length) {
+    const id = queue.shift();
+    for (const f of folders) {
+      if (f.parentId === id) {
+        result.add(f.id);
+        queue.push(f.id);
+      }
+    }
+  }
+  return result;
+}
 
 export function Sidebar({ onCreateBoard, onOpenCommandPalette }) {
   const collapsed = useUIStore((s) => s.sidebarCollapsed);
@@ -108,45 +127,11 @@ export function Sidebar({ onCreateBoard, onOpenCommandPalette }) {
         </ul>
 
         {!collapsed && (
-          <div className="mt-6">
-            <button
-              onClick={() => setFoldersOpen((v) => !v)}
-              className="mb-1 flex w-full items-center justify-between px-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-ink-400 hover:text-ink-600 dark:hover:text-ink-200"
-            >
-              <span>Folders</span>
-              <span>{foldersOpen ? '−' : '+'}</span>
-            </button>
-            <AnimatePresence initial={false}>
-              {foldersOpen && (
-                <motion.ul
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: 'auto', opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  transition={{ duration: 0.18 }}
-                  className="space-y-0.5 overflow-hidden"
-                >
-                  {folders.length === 0 && (
-                    <li className="px-3 py-2 text-xs text-ink-400">No folders yet.</li>
-                  )}
-                  {folders.map((folder) => (
-                    <li key={folder.id}>
-                      <NavLink
-                        to={`/?folderId=${folder.id}`}
-                        className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm text-ink-600 transition hover:bg-ink-100 dark:text-ink-300 dark:hover:bg-ink-800/70"
-                      >
-                        <Folder
-                          className="h-4 w-4"
-                          style={{ color: folder.color ?? undefined }}
-                        />
-                        <span className="flex-1 truncate">{folder.name}</span>
-                        <span className="text-xs text-ink-400">{folder.boardCount}</span>
-                      </NavLink>
-                    </li>
-                  ))}
-                </motion.ul>
-              )}
-            </AnimatePresence>
-          </div>
+          <FolderSection
+            folders={folders}
+            open={foldersOpen}
+            onToggle={() => setFoldersOpen((v) => !v)}
+          />
         )}
       </nav>
 
@@ -176,3 +161,418 @@ export function Sidebar({ onCreateBoard, onOpenCommandPalette }) {
     </motion.aside>
   );
 }
+
+/* ── Folder section ─────────────────────────────────────────────────────── */
+
+function FolderSection({ folders, open, onToggle }) {
+  const createFolder = useCreateFolder();
+  const updateFolder = useUpdateFolder();
+  const deleteFolder = useDeleteFolder();
+
+  const [expandedIds, setExpandedIds] = useState(new Set());
+  const [editingId, setEditingId] = useState(null);   // rename inline
+  const [editingName, setEditingName] = useState('');
+  const [creatingIn, setCreatingIn] = useState(undefined); // undefined=closed, null=root, id=child
+  const [newFolderName, setNewFolderName] = useState('');
+  const [menuId, setMenuId] = useState(null);          // context menu
+  const [movePickerId, setMovePickerId] = useState(null); // folder being moved
+
+  const newInputRef = useRef(null);
+  const editInputRef = useRef(null);
+
+  useEffect(() => {
+    if (creatingIn !== undefined) newInputRef.current?.focus();
+  }, [creatingIn]);
+
+  useEffect(() => {
+    if (editingId) editInputRef.current?.select();
+  }, [editingId]);
+
+  const toggleExpand = (id) =>
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+
+  const handleCreate = async (parentId) => {
+    const name = newFolderName.trim();
+    if (!name) { setCreatingIn(undefined); return; }
+    try {
+      await createFolder.mutateAsync({ name, parentId: parentId ?? null });
+      if (parentId) setExpandedIds((p) => new Set([...p, parentId]));
+    } catch {
+      toast.error('Could not create folder');
+    }
+    setCreatingIn(undefined);
+    setNewFolderName('');
+  };
+
+  const handleRename = async (folder) => {
+    const name = editingName.trim();
+    setEditingId(null);
+    if (!name || name === folder.name) return;
+    try {
+      await updateFolder.mutateAsync({ id: folder.id, name });
+    } catch {
+      toast.error('Could not rename folder');
+    }
+  };
+
+  const handleDelete = async (folder) => {
+    setMenuId(null);
+    if (!confirm(`Delete "${folder.name}"? Boards inside will be moved to root.`)) return;
+    try {
+      await deleteFolder.mutateAsync(folder.id);
+    } catch {
+      toast.error('Could not delete folder');
+    }
+  };
+
+  const handleMove = async (folderId, targetParentId) => {
+    setMovePickerId(null);
+    setMenuId(null);
+    try {
+      await updateFolder.mutateAsync({ id: folderId, parentId: targetParentId });
+      if (targetParentId) setExpandedIds((p) => new Set([...p, targetParentId]));
+    } catch {
+      toast.error('Could not move folder');
+    }
+  };
+
+  const rootFolders = folders.filter((f) => !f.parentId);
+
+  return (
+    <div className="mt-6">
+      {/* Section header */}
+      <div className="mb-1 flex items-center justify-between px-3">
+        <button
+          onClick={onToggle}
+          className="text-[11px] font-semibold uppercase tracking-[0.18em] text-ink-400 hover:text-ink-600 dark:hover:text-ink-200"
+        >
+          Folders
+        </button>
+        <button
+          onClick={() => { setCreatingIn(null); setNewFolderName(''); }}
+          className="rounded p-0.5 text-ink-400 transition hover:text-ink-700 dark:hover:text-ink-100"
+          title="New folder"
+        >
+          <Plus className="h-3.5 w-3.5" />
+        </button>
+      </div>
+
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.18 }}
+            className="overflow-hidden"
+          >
+            {/* New root folder input */}
+            {creatingIn === null && (
+              <NewFolderInput
+                ref={newInputRef}
+                value={newFolderName}
+                onChange={setNewFolderName}
+                onCommit={() => handleCreate(null)}
+                onCancel={() => { setCreatingIn(undefined); setNewFolderName(''); }}
+                depth={0}
+              />
+            )}
+
+            {rootFolders.length === 0 && creatingIn !== null && (
+              <p className="px-3 py-2 text-xs text-ink-400">No folders yet.</p>
+            )}
+
+            {rootFolders.map((folder) => (
+              <FolderRow
+                key={folder.id}
+                folder={folder}
+                folders={folders}
+                depth={0}
+                expandedIds={expandedIds}
+                onToggleExpand={toggleExpand}
+                editingId={editingId}
+                editingName={editingName}
+                editInputRef={editInputRef}
+                onEditStart={(f) => { setEditingId(f.id); setEditingName(f.name); setMenuId(null); }}
+                onEditChange={setEditingName}
+                onEditCommit={handleRename}
+                onEditCancel={() => setEditingId(null)}
+                menuId={menuId}
+                onMenuOpen={(id) => setMenuId(id === menuId ? null : id)}
+                onMenuClose={() => setMenuId(null)}
+                onDelete={handleDelete}
+                movePickerId={movePickerId}
+                onMoveOpen={(id) => { setMovePickerId(id); setMenuId(null); }}
+                onMoveClose={() => setMovePickerId(null)}
+                onMove={handleMove}
+                creatingIn={creatingIn}
+                newFolderName={newFolderName}
+                newInputRef={newInputRef}
+                onNewFolderStart={(parentId) => { setCreatingIn(parentId); setNewFolderName(''); }}
+                onNewFolderChange={setNewFolderName}
+                onNewFolderCommit={handleCreate}
+                onNewFolderCancel={() => { setCreatingIn(undefined); setNewFolderName(''); }}
+              />
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+/* ── Folder row (recursive) ─────────────────────────────────────────────── */
+
+function FolderRow({
+  folder, folders, depth,
+  expandedIds, onToggleExpand,
+  editingId, editingName, editInputRef, onEditStart, onEditChange, onEditCommit, onEditCancel,
+  menuId, onMenuOpen, onMenuClose, onDelete,
+  movePickerId, onMoveOpen, onMoveClose, onMove,
+  creatingIn, newFolderName, newInputRef, onNewFolderStart, onNewFolderChange,
+  onNewFolderCommit, onNewFolderCancel,
+}) {
+  const children = folders.filter((f) => f.parentId === folder.id);
+  const hasChildren = children.length > 0;
+  const expanded = expandedIds.has(folder.id);
+  const isEditing = editingId === folder.id;
+  const menuOpen = menuId === folder.id;
+  const moveOpen = movePickerId === folder.id;
+
+  const indentPx = depth * 14;
+
+  return (
+    <>
+      <div
+        className="group relative flex items-center rounded-xl text-sm text-ink-600 transition hover:bg-ink-100 dark:text-ink-300 dark:hover:bg-ink-800/70"
+        style={{ paddingLeft: `${12 + indentPx}px`, paddingRight: '4px' }}
+      >
+        {/* Expand chevron */}
+        <button
+          onClick={() => onToggleExpand(folder.id)}
+          className="mr-1 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded text-ink-400 transition hover:text-ink-700 dark:hover:text-ink-100"
+        >
+          {hasChildren || creatingIn === folder.id ? (
+            <ChevronRight
+              className={cn('h-3 w-3 transition-transform', expanded && 'rotate-90')}
+            />
+          ) : (
+            <span className="h-3 w-3" />
+          )}
+        </button>
+
+        {/* Folder icon */}
+        <NavLink
+          to={`/?folderId=${folder.id}`}
+          className="flex flex-1 items-center gap-2 truncate py-1.5 pr-1"
+          onClick={onMenuClose}
+        >
+          {expanded ? (
+            <FolderOpen className="h-4 w-4 flex-shrink-0" style={{ color: folder.color ?? undefined }} />
+          ) : (
+            <Folder className="h-4 w-4 flex-shrink-0" style={{ color: folder.color ?? undefined }} />
+          )}
+
+          {isEditing ? (
+            <input
+              ref={editInputRef}
+              value={editingName}
+              onChange={(e) => onEditChange(e.target.value)}
+              onBlur={() => onEditCommit(folder)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') onEditCommit(folder);
+                if (e.key === 'Escape') onEditCancel();
+              }}
+              onClick={(e) => e.preventDefault()}
+              className="min-w-0 flex-1 bg-transparent text-sm outline-none"
+            />
+          ) : (
+            <span className="flex-1 truncate">{folder.name}</span>
+          )}
+
+          {!isEditing && (
+            <span className="ml-auto flex-shrink-0 text-xs text-ink-400">{folder.boardCount || ''}</span>
+          )}
+        </NavLink>
+
+        {/* "..." menu button */}
+        {!isEditing && (
+          <button
+            onClick={(e) => { e.preventDefault(); onMenuOpen(folder.id); }}
+            className="flex-shrink-0 rounded p-1 text-ink-400 opacity-0 transition group-hover:opacity-100 hover:text-ink-700 dark:hover:text-ink-100"
+          >
+            <MoreHorizontal className="h-3.5 w-3.5" />
+          </button>
+        )}
+
+        {/* Context menu */}
+        {menuOpen && (
+          <div
+            className="absolute left-full top-0 z-50 ml-1 w-44 overflow-hidden rounded-xl border border-ink-200/70 bg-white shadow-ring dark:border-ink-700/70 dark:bg-ink-900"
+            onMouseLeave={onMenuClose}
+          >
+            <button
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-ink-100 dark:hover:bg-ink-800"
+              onClick={() => onEditStart(folder)}
+            >
+              <Pencil className="h-3.5 w-3.5" /> Rename
+            </button>
+            <button
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-ink-100 dark:hover:bg-ink-800"
+              onClick={() => { onNewFolderStart(folder.id); onToggleExpand(folder.id); }}
+            >
+              <FolderInput className="h-3.5 w-3.5" /> New subfolder
+            </button>
+            <button
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-ink-100 dark:hover:bg-ink-800"
+              onClick={() => onMoveOpen(folder.id)}
+            >
+              <FolderUp className="h-3.5 w-3.5" /> Move into…
+            </button>
+            {folder.parentId && (
+              <button
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-ink-100 dark:hover:bg-ink-800"
+                onClick={() => onMove(folder.id, null)}
+              >
+                <FolderUp className="h-3.5 w-3.5" /> Move to root
+              </button>
+            )}
+            <div className="my-1 border-t border-ink-100 dark:border-ink-800" />
+            <button
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10"
+              onClick={() => onDelete(folder)}
+            >
+              <Trash2 className="h-3.5 w-3.5" /> Delete
+            </button>
+          </div>
+        )}
+
+        {/* Move picker */}
+        {moveOpen && (
+          <MovePicker
+            folder={folder}
+            folders={folders}
+            onMove={onMove}
+            onClose={onMoveClose}
+          />
+        )}
+      </div>
+
+      {/* Children */}
+      {(expandedIds.has(folder.id) || creatingIn === folder.id) && (
+        <>
+          {creatingIn === folder.id && (
+            <NewFolderInput
+              ref={newInputRef}
+              value={newFolderName}
+              onChange={onNewFolderChange}
+              onCommit={() => onNewFolderCommit(folder.id)}
+              onCancel={onNewFolderCancel}
+              depth={depth + 1}
+            />
+          )}
+          {children.map((child) => (
+            <FolderRow
+              key={child.id}
+              folder={child}
+              folders={folders}
+              depth={depth + 1}
+              expandedIds={expandedIds}
+              onToggleExpand={onToggleExpand}
+              editingId={editingId}
+              editingName={editingName}
+              editInputRef={editInputRef}
+              onEditStart={onEditStart}
+              onEditChange={onEditChange}
+              onEditCommit={onEditCommit}
+              onEditCancel={onEditCancel}
+              menuId={menuId}
+              onMenuOpen={onMenuOpen}
+              onMenuClose={onMenuClose}
+              onDelete={onDelete}
+              movePickerId={movePickerId}
+              onMoveOpen={onMoveOpen}
+              onMoveClose={onMoveClose}
+              onMove={onMove}
+              creatingIn={creatingIn}
+              newFolderName={newFolderName}
+              newInputRef={newInputRef}
+              onNewFolderStart={onNewFolderStart}
+              onNewFolderChange={onNewFolderChange}
+              onNewFolderCommit={onNewFolderCommit}
+              onNewFolderCancel={onNewFolderCancel}
+            />
+          ))}
+        </>
+      )}
+    </>
+  );
+}
+
+/* ── Move picker ────────────────────────────────────────────────────────── */
+
+function MovePicker({ folder, folders, onMove, onClose }) {
+  const descendants = getDescendantIds(folder.id, folders);
+  const targets = folders.filter(
+    (f) => f.id !== folder.id && !descendants.has(f.id),
+  );
+
+  return (
+    <div
+      className="absolute left-full top-0 z-50 ml-1 max-h-56 w-48 overflow-y-auto rounded-xl border border-ink-200/70 bg-white shadow-ring scrollbar-thin dark:border-ink-700/70 dark:bg-ink-900"
+      onMouseLeave={onClose}
+    >
+      <div className="border-b border-ink-100 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-ink-400 dark:border-ink-800">
+        Move into
+      </div>
+      {targets.length === 0 ? (
+        <p className="px-3 py-2 text-xs text-ink-400">No other folders</p>
+      ) : (
+        targets.map((t) => (
+          <button
+            key={t.id}
+            onClick={() => onMove(folder.id, t.id)}
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-ink-100 dark:hover:bg-ink-800"
+          >
+            <Folder className="h-3.5 w-3.5 flex-shrink-0" style={{ color: t.color ?? undefined }} />
+            <span className="truncate">{t.name}</span>
+          </button>
+        ))
+      )}
+    </div>
+  );
+}
+
+/* ── New folder inline input ────────────────────────────────────────────── */
+
+import { forwardRef } from 'react';
+
+const NewFolderInput = forwardRef(function NewFolderInput(
+  { value, onChange, onCommit, onCancel, depth },
+  ref,
+) {
+  return (
+    <div
+      className="flex items-center gap-2 rounded-xl px-3 py-1.5"
+      style={{ paddingLeft: `${12 + depth * 14 + 24}px` }}
+    >
+      <Folder className="h-4 w-4 flex-shrink-0 text-ink-400" />
+      <input
+        ref={ref}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onBlur={onCommit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') onCommit();
+          if (e.key === 'Escape') onCancel();
+        }}
+        placeholder="Folder name"
+        className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-ink-300"
+      />
+    </div>
+  );
+});

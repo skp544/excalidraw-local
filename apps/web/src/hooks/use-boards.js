@@ -133,6 +133,34 @@ export function useDeletePage() {
   });
 }
 
+export function useCreateFolder() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload) => (await api.post('/folders', payload)).data,
+    onSuccess: () => qc.invalidateQueries({ queryKey: boardKeys.folders }),
+  });
+}
+
+export function useUpdateFolder() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...payload }) =>
+      (await api.patch(`/folders/${id}`, payload)).data,
+    onSuccess: () => qc.invalidateQueries({ queryKey: boardKeys.folders }),
+  });
+}
+
+export function useDeleteFolder() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id) => (await api.delete(`/folders/${id}`)).data,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: boardKeys.folders });
+      qc.invalidateQueries({ queryKey: boardKeys.all });
+    },
+  });
+}
+
 export function useActivity() {
   return useQuery({
     queryKey: boardKeys.activity,
