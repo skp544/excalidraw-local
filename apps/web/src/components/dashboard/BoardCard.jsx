@@ -19,9 +19,11 @@ export function BoardCard({ board, onToggleFavorite, onDuplicate, onDelete, view
   const folders = foldersData?.items ?? [];
   const updateBoard = useUpdateBoard();
 
-  const to = (board.pageCount ?? 1) > 1
-    ? `/board/${board.id}/pages`
-    : `/board/${board.id}`;
+  const to = board.pageType === 'note'
+    ? `/note/${board.id}`
+    : (board.pageCount ?? 1) > 1
+      ? `/board/${board.id}/pages`
+      : `/board/${board.id}`;
 
   const closeMenu = () => { setMenuOpen(false); setFolderPickerOpen(false); };
 

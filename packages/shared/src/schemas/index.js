@@ -8,9 +8,7 @@ import {
   MAX_TAGS_PER_BOARD,
 } from '../constants/index.js';
 
-const objectId = z
-  .string()
-  .regex(/^[a-fA-F0-9]{24}$/, 'invalid id');
+const objectId = z.string().regex(/^[a-fA-F0-9]{24}$/, 'invalid id');
 
 export const registerSchema = z
   .object({
@@ -61,6 +59,7 @@ export const boardCreateSchema = z
     title: z.string().trim().min(1).max(MAX_BOARD_TITLE_LENGTH),
     description: z.string().max(2000).optional().nullable(),
     mode: z.enum(BOARD_MODES).default('free'),
+    pageType: z.enum(['canvas', 'note']).default('canvas').optional(),
     folderId: objectId.nullable().optional(),
     tags: z.array(z.string().trim().min(1).max(40)).max(MAX_TAGS_PER_BOARD).optional(),
     template: z.string().max(80).optional(),
@@ -76,7 +75,7 @@ export const boardUpdateSchema = boardCreateSchema.partial().extend({
 export const boardListQuerySchema = z
   .object({
     page: z.coerce.number().int().min(1).default(1),
-    pageSize: z.coerce.number().int().min(1).max(100).default(24),
+    pageSize: z.coerce.number().int().min(1).max(500).default(24),
     search: z.string().trim().max(200).optional(),
     folderId: objectId.optional(),
     favorite: z.coerce.boolean().optional(),
@@ -139,5 +138,17 @@ export const aiGenerateSchema = z
     prompt: z.string().trim().min(1).max(4000),
   })
   .strict();
+
+export const noteUpdateSchema = z
+  .object({
+    content: z.string().max(500000).default(''),
+  })
+  .strict();
+
+export const snippetCreateSchema = z.object({
+  command: z.string().trim().min(1, 'Command is required').max(500),
+  description: z.string().trim().max(1000).default(''),
+  tags: z.array(z.string().trim().max(50)).max(20).default([]),
+});
 
 export { objectId };

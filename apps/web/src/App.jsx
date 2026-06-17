@@ -12,6 +12,7 @@ import { LoginPage } from '@/pages/LoginPage.jsx';
 import { RegisterPage } from '@/pages/RegisterPage.jsx';
 import { BoardEditorPage } from '@/pages/BoardEditorPage.jsx';
 import { BoardPagesPage } from '@/pages/BoardPagesPage.jsx';
+import { NoteEditorPage } from '@/pages/NoteEditorPage.jsx';
 import { useThemeStore } from '@/stores/theme-store.js';
 
 export default function App() {
@@ -29,6 +30,7 @@ export default function App() {
         <Route element={<ProtectedRoute />}>
           <Route path="/board/:id" element={<BoardEditorPage />} />
           <Route path="/board/:id/pages" element={<BoardPagesPage />} />
+          <Route path="/note/:id" element={<NoteEditorPage />} />
           <Route element={<DashboardLayout />}>
             <Route index element={<DashboardPage />} />
             <Route path="/templates" element={<TemplatesPage />} />

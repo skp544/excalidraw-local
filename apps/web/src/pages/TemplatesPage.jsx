@@ -198,6 +198,7 @@ function TemplatePreview({ tpl }) {
     brainstorm: <BrainstormPreview />,
     'user-story-map': <StoryMapPreview />,
     sequence:  <SequencePreview />,
+    'command-ref': <CommandRefPreview />,
   };
   return (
     <div className="flex h-full w-full items-center justify-center p-4">
@@ -448,6 +449,31 @@ function SequencePreview() {
     })}
     <defs><marker id="sm" markerWidth="5" markerHeight="5" refX="5" refY="2.5" orient="auto"><path d="M0,0 L5,2.5 L0,5" fill="#7c3aed"/></marker></defs>
   </SV>;
+}
+
+function CommandRefPreview() {
+  const rows = [
+    { cmd: 'ls -la', desc: 'List all files with permissions' },
+    { cmd: 'git status', desc: 'Show working tree status' },
+    { cmd: 'npm run dev', desc: 'Start development server' },
+  ];
+  return (
+    <SV vb="0 0 200 130">
+      {/* Title bar */}
+      <rect x="4" y="4" width="192" height="18" rx="3" fill="#1e1e2e" stroke="#4a4a6a" strokeWidth="0.75"/>
+      <text x="10" y="16" fontSize="7" fill="#7ee787" fontFamily="monospace"># Command Reference</text>
+
+      {/* Snippet cards */}
+      {rows.map(({ cmd, desc }, i) => (
+        <g key={i}>
+          <rect x="4" y={28 + i * 34} width="192" height="14" rx="2" fill="#1e1e2e" stroke="#4a4a6a" strokeWidth="0.75"/>
+          <text x="9" y={38 + i * 34} fontSize="7" fill="#7ee787" fontFamily="monospace">$ {cmd}</text>
+          <rect x="4" y={42 + i * 34} width="192" height="13" rx="0" fill="#f8fafc" stroke="#e2e8f0" strokeWidth="0.5"/>
+          <text x="9" y={51 + i * 34} fontSize="6.5" fill="#475569">{desc}</text>
+        </g>
+      ))}
+    </SV>
+  );
 }
 
 function DefaultPreview() {

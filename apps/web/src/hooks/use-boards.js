@@ -4,6 +4,7 @@ import { api } from '@/lib/api.js';
 export const boardKeys = {
   all: ['boards'],
   list: (params) => ['boards', 'list', params],
+  sidebarAll: ['boards', 'sidebar-all'],
   detail: (id) => ['boards', 'detail', id],
   pages: (boardId) => ['boards', boardId, 'pages'],
   page: (boardId, pageId) => ['boards', boardId, 'pages', pageId],
@@ -15,6 +16,14 @@ export function useBoardList(params = {}) {
   return useQuery({
     queryKey: boardKeys.list(params),
     queryFn: async () => (await api.get('/boards', { params })).data,
+  });
+}
+
+export function useBoardsAll() {
+  return useQuery({
+    queryKey: boardKeys.sidebarAll,
+    queryFn: async () =>
+      (await api.get('/boards', { params: { pageSize: 500, sortBy: 'updatedAt', sortDir: 'desc' } })).data,
   });
 }
 
@@ -157,6 +166,17 @@ export function useDeleteFolder() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: boardKeys.folders });
       qc.invalidateQueries({ queryKey: boardKeys.all });
+    },
+  });
+}
+
+export function useUpdateNoteContent() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, content }) =>
+      (await api.patch(`/boards/${id}/note`, { content })).data,
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: boardKeys.detail(vars.id) });
     },
   });
 }

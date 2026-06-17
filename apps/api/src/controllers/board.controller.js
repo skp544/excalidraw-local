@@ -43,13 +43,13 @@ export const listBoards = asyncHandler(async (req, res) => {
 
 export const getBoard = asyncHandler(async (req, res) => {
   const board = await getOwnedBoard(req.params.id, req.user.id);
-  const pages = await Page.find({ boardId: board._id })
-    .select('-versions -scene')
-    .sort({ index: 1 });
   board.lastOpenedAt = new Date();
   await board.save();
+  const pages = board.pageType === 'note'
+    ? []
+    : await Page.find({ boardId: board._id }).select('-versions -scene').sort({ index: 1 });
   res.json({
-    board: board.toSummary(),
+    board: { ...board.toSummary(), noteContent: board.noteContent ?? '' },
     pages: pages.map((p) => p.toSummary()),
   });
 });
@@ -59,33 +59,47 @@ export const createBoard = asyncHandler(async (req, res) => {
     const folder = await Folder.findOne({ _id: req.body.folderId, ownerId: req.user.id });
     if (!folder) throw HttpError.badRequest('Invalid folder');
   }
+  const isNote = req.body.pageType === 'note';
   const board = await Board.create({
     ownerId: req.user.id,
     title: req.body.title,
     description: req.body.description ?? null,
-    mode: req.body.mode,
+    mode: req.body.mode ?? 'free',
+    pageType: isNote ? 'note' : 'canvas',
     folderId: req.body.folderId ?? null,
     tags: req.body.tags ?? [],
-    pageCount: 1,
+    pageCount: isNote ? 0 : 1,
     lastOpenedAt: new Date(),
   });
-  const page = await Page.create({
-    boardId: board._id,
-    ownerId: req.user.id,
-    title: 'Page 1',
-    index: 0,
-  });
+  const pages = [];
+  if (!isNote) {
+    const page = await Page.create({
+      boardId: board._id,
+      ownerId: req.user.id,
+      title: 'Page 1',
+      index: 0,
+    });
+    pages.push(page);
+  }
   await logActivity({
     actorId: req.user.id,
     kind: 'board.created',
-    message: `Created board "${board.title}"`,
+    message: `Created ${isNote ? 'note' : 'board'} "${board.title}"`,
     targetKind: 'board',
     targetId: board._id,
   });
   res.status(201).json({
-    board: board.toSummary(),
-    pages: [page.toSummary()],
+    board: { ...board.toSummary(), noteContent: '' },
+    pages: pages.map((p) => p.toSummary()),
   });
+});
+
+export const saveNoteContent = asyncHandler(async (req, res) => {
+  const board = await getOwnedBoard(req.params.id, req.user.id);
+  if (board.pageType !== 'note') throw HttpError.badRequest('Not a note board');
+  board.noteContent = req.body.content ?? '';
+  await board.save();
+  res.json({ ok: true });
 });
 
 export const updateBoard = asyncHandler(async (req, res) => {

@@ -1,18 +1,31 @@
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
 
-export const useUIStore = create((set) => ({
-  sidebarCollapsed: false,
-  toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
+export const useUIStore = create(
+  persist(
+    (set) => ({
+      sidebarCollapsed: false,
+      toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
 
-  commandPaletteOpen: false,
-  openCommandPalette: () => set({ commandPaletteOpen: true }),
-  closeCommandPalette: () => set({ commandPaletteOpen: false }),
-  toggleCommandPalette: () => set((s) => ({ commandPaletteOpen: !s.commandPaletteOpen })),
+      sidebarWidth: 268,
+      setSidebarWidth: (w) => set({ sidebarWidth: w }),
 
-  shortcutsOpen: false,
-  openShortcuts: () => set({ shortcutsOpen: true }),
-  closeShortcuts: () => set({ shortcutsOpen: false }),
+      commandPaletteOpen: false,
+      openCommandPalette: () => set({ commandPaletteOpen: true }),
+      closeCommandPalette: () => set({ commandPaletteOpen: false }),
+      toggleCommandPalette: () => set((s) => ({ commandPaletteOpen: !s.commandPaletteOpen })),
 
-  view: 'grid', // 'grid' | 'list'
-  setView: (view) => set({ view }),
-}));
+      shortcutsOpen: false,
+      openShortcuts: () => set({ shortcutsOpen: true }),
+      closeShortcuts: () => set({ shortcutsOpen: false }),
+
+      view: 'grid', // 'grid' | 'list'
+      setView: (view) => set({ view }),
+    }),
+    {
+      name: 'excalidrow.ui',
+      storage: createJSONStorage(() => localStorage),
+      partialize: (s) => ({ sidebarWidth: s.sidebarWidth, sidebarCollapsed: s.sidebarCollapsed }),
+    },
+  ),
+);

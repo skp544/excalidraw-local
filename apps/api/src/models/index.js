@@ -6,3 +6,4 @@ export { Folder } from './Folder.js';
 export { Asset } from './Asset.js';
 export { Activity } from './Activity.js';
 export { Notification } from './Notification.js';
+export { Snippet } from './Snippet.js';

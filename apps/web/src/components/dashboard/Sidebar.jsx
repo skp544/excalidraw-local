@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useRef, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
@@ -6,6 +6,7 @@ import {
   Home, Star, Archive, Layers, Sparkles, Plus, Folder, FolderOpen,
   Search, Settings, ChevronsLeft, ChevronsRight, BookTemplate,
   ChevronRight, MoreHorizontal, Pencil, Trash2, FolderInput, FolderUp,
+  Layout, FileText, FolderPlus, X,
 } from 'lucide-react';
 
 import { Logo } from '@/components/ui/Logo.jsx';
@@ -13,6 +14,7 @@ import { Button } from '@/components/ui/Button.jsx';
 import { useUIStore } from '@/stores/ui-store.js';
 import {
   useFolders, useCreateFolder, useUpdateFolder, useDeleteFolder,
+  useBoardsAll, useCreateBoard,
 } from '@/hooks/use-boards.js';
 import { cn } from '@/lib/cn.js';
 
@@ -39,19 +41,62 @@ function getDescendantIds(folderId, folders) {
   return result;
 }
 
+const MIN_WIDTH = 180;
+const MAX_WIDTH = 520;
+
 export function Sidebar({ onCreateBoard, onOpenCommandPalette }) {
   const collapsed = useUIStore((s) => s.sidebarCollapsed);
   const toggleSidebar = useUIStore((s) => s.toggleSidebar);
+  const sidebarWidth = useUIStore((s) => s.sidebarWidth);
+  const setSidebarWidth = useUIStore((s) => s.setSidebarWidth);
   const { data: foldersData } = useFolders();
+  const { data: boardsData } = useBoardsAll();
   const folders = foldersData?.items ?? [];
+  const boards = boardsData?.items ?? [];
   const navigate = useNavigate();
   const [foldersOpen, setFoldersOpen] = useState(true);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragRef = useRef({ startX: 0, startWidth: 268 });
+
+  const handleDragStart = useCallback(
+    (e) => {
+      e.preventDefault();
+      dragRef.current = { startX: e.clientX, startWidth: sidebarWidth };
+      setIsDragging(true);
+    },
+    [sidebarWidth],
+  );
+
+  useEffect(() => {
+    if (!isDragging) return;
+    const onMove = (e) => {
+      const delta = e.clientX - dragRef.current.startX;
+      setSidebarWidth(Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, dragRef.current.startWidth + delta)));
+    };
+    const onUp = () => setIsDragging(false);
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    return () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+  }, [isDragging, setSidebarWidth]);
+
+  // Lock cursor globally during drag so it doesn't flicker
+  useEffect(() => {
+    document.body.style.cursor = isDragging ? 'col-resize' : '';
+    document.body.style.userSelect = isDragging ? 'none' : '';
+    return () => {
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, [isDragging]);
 
   return (
     <motion.aside
       initial={false}
-      animate={{ width: collapsed ? 72 : 268 }}
-      transition={{ type: 'spring', stiffness: 320, damping: 32 }}
+      animate={{ width: collapsed ? 72 : sidebarWidth }}
+      transition={isDragging ? { duration: 0 } : { type: 'spring', stiffness: 320, damping: 32 }}
       className="relative z-20 flex h-full flex-col border-r border-ink-200/70 bg-white/70 backdrop-blur-xl dark:border-ink-800 dark:bg-ink-900/60"
     >
       <div className="flex items-center justify-between px-4 pb-3 pt-5">
@@ -79,7 +124,7 @@ export function Sidebar({ onCreateBoard, onOpenCommandPalette }) {
           onClick={onCreateBoard}
         >
           <Plus className="h-4 w-4" />
-          {!collapsed && <span>New board</span>}
+          {!collapsed && <span>New page</span>}
         </Button>
 
         <button
@@ -129,6 +174,7 @@ export function Sidebar({ onCreateBoard, onOpenCommandPalette }) {
         {!collapsed && (
           <FolderSection
             folders={folders}
+            boards={boards}
             open={foldersOpen}
             onToggle={() => setFoldersOpen((v) => !v)}
           />
@@ -158,24 +204,38 @@ export function Sidebar({ onCreateBoard, onOpenCommandPalette }) {
           </NavLink>
         )}
       </div>
+
+      {/* Drag-to-resize handle */}
+      {!collapsed && (
+        <div
+          onMouseDown={handleDragStart}
+          className={cn(
+            'absolute right-0 top-0 z-40 h-full w-1 cursor-col-resize transition-colors duration-150',
+            isDragging ? 'bg-violetx-400/50' : 'bg-transparent hover:bg-violetx-400/30',
+          )}
+        />
+      )}
     </motion.aside>
   );
 }
 
 /* ── Folder section ─────────────────────────────────────────────────────── */
 
-function FolderSection({ folders, open, onToggle }) {
+function FolderSection({ folders, boards, open, onToggle }) {
   const createFolder = useCreateFolder();
   const updateFolder = useUpdateFolder();
   const deleteFolder = useDeleteFolder();
+  const createBoard = useCreateBoard();
+  const navigate = useNavigate();
 
   const [expandedIds, setExpandedIds] = useState(new Set());
-  const [editingId, setEditingId] = useState(null);   // rename inline
+  const [editingId, setEditingId] = useState(null);
   const [editingName, setEditingName] = useState('');
-  const [creatingIn, setCreatingIn] = useState(undefined); // undefined=closed, null=root, id=child
+  const [creatingIn, setCreatingIn] = useState(undefined);
   const [newFolderName, setNewFolderName] = useState('');
-  const [menuId, setMenuId] = useState(null);          // context menu
-  const [movePickerId, setMovePickerId] = useState(null); // folder being moved
+  const [menuId, setMenuId] = useState(null);
+  const [movePickerId, setMovePickerId] = useState(null);
+  const [addingPageIn, setAddingPageIn] = useState(null); // folderId | 'root' | null
 
   const newInputRef = useRef(null);
   const editInputRef = useRef(null);
@@ -240,7 +300,28 @@ function FolderSection({ folders, open, onToggle }) {
     }
   };
 
+  const handleQuickCreate = async (folderId, pageType) => {
+    setAddingPageIn(null);
+    if (pageType === 'folder') {
+      setCreatingIn(folderId);
+      setNewFolderName('');
+      if (folderId) setExpandedIds((p) => new Set([...p, folderId]));
+      return;
+    }
+    try {
+      const data = await createBoard.mutateAsync({
+        title: 'Untitled',
+        pageType,
+        folderId: folderId === 'root' ? null : (folderId ?? null),
+      });
+      navigate(pageType === 'note' ? `/note/${data.board.id}` : `/board/${data.board.id}`);
+    } catch {
+      toast.error('Could not create page');
+    }
+  };
+
   const rootFolders = folders.filter((f) => !f.parentId);
+  const rootBoards = boards.filter((b) => !b.folderId);
 
   return (
     <div className="mt-6">
@@ -250,7 +331,7 @@ function FolderSection({ folders, open, onToggle }) {
           onClick={onToggle}
           className="text-[11px] font-semibold uppercase tracking-[0.18em] text-ink-400 hover:text-ink-600 dark:hover:text-ink-200"
         >
-          Folders
+          Workspace
         </button>
         <button
           onClick={() => { setCreatingIn(null); setNewFolderName(''); }}
@@ -282,7 +363,7 @@ function FolderSection({ folders, open, onToggle }) {
               />
             )}
 
-            {rootFolders.length === 0 && creatingIn !== null && (
+            {rootFolders.length === 0 && creatingIn !== null && rootBoards.length === 0 && (
               <p className="px-3 py-2 text-xs text-ink-400">No folders yet.</p>
             )}
 
@@ -291,6 +372,7 @@ function FolderSection({ folders, open, onToggle }) {
                 key={folder.id}
                 folder={folder}
                 folders={folders}
+                boards={boards}
                 depth={0}
                 expandedIds={expandedIds}
                 onToggleExpand={toggleExpand}
@@ -316,8 +398,64 @@ function FolderSection({ folders, open, onToggle }) {
                 onNewFolderChange={setNewFolderName}
                 onNewFolderCommit={handleCreate}
                 onNewFolderCancel={() => { setCreatingIn(undefined); setNewFolderName(''); }}
+                addingPageIn={addingPageIn}
+                onAddPage={(folderId) => setAddingPageIn(folderId)}
+                onAddPageCancel={() => setAddingPageIn(null)}
+                onQuickCreate={handleQuickCreate}
               />
             ))}
+
+            {/* Root-level boards (no folder) */}
+            {rootBoards.length > 0 && (
+              <div className="mt-3">
+                <div className="mb-0.5 flex items-center justify-between px-3">
+                  <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-400">
+                    Root pages
+                  </span>
+                  <button
+                    onClick={() => setAddingPageIn('root')}
+                    className="rounded p-0.5 text-ink-400 transition hover:text-ink-700 dark:hover:text-ink-100"
+                    title="New root page"
+                  >
+                    <Plus className="h-3 w-3" />
+                  </button>
+                </div>
+                <AnimatePresence>
+                  {addingPageIn === 'root' && (
+                    <TypePicker
+                      depth={0}
+                      onPick={(type) => handleQuickCreate('root', type)}
+                      onCancel={() => setAddingPageIn(null)}
+                    />
+                  )}
+                </AnimatePresence>
+                {rootBoards.map((board) => (
+                  <BoardItem key={board.id} board={board} depth={0} />
+                ))}
+              </div>
+            )}
+
+            {/* Root pages section when empty — still show add button */}
+            {rootBoards.length === 0 && (
+              <div className="mt-1 px-3">
+                <button
+                  onClick={() => setAddingPageIn('root')}
+                  className="flex items-center gap-1.5 rounded-lg py-1 text-xs text-ink-400 transition hover:text-ink-600 dark:hover:text-ink-200"
+                >
+                  <Plus className="h-3 w-3" />
+                  Add root page
+                </button>
+                <AnimatePresence>
+                  {addingPageIn === 'root' && (
+                    <TypePicker
+                      depth={0}
+                      onPick={(type) => handleQuickCreate('root', type)}
+                      onCancel={() => setAddingPageIn(null)}
+                    />
+                  )}
+                </AnimatePresence>
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
@@ -325,23 +463,96 @@ function FolderSection({ folders, open, onToggle }) {
   );
 }
 
+/* ── Board item ─────────────────────────────────────────────────────────── */
+
+function BoardItem({ board, depth }) {
+  const navigate = useNavigate();
+  const to = board.pageType === 'note' ? `/note/${board.id}` : `/board/${board.id}`;
+  return (
+    <button
+      onClick={() => navigate(to)}
+      className="flex w-full items-center gap-2 rounded-xl py-1.5 text-left text-sm text-ink-600 transition hover:bg-ink-100 dark:text-ink-300 dark:hover:bg-ink-800/70"
+      style={{ paddingLeft: `${12 + (depth + 1) * 14 + 20}px`, paddingRight: '8px' }}
+    >
+      {board.pageType === 'note' ? (
+        <FileText className="h-3.5 w-3.5 flex-shrink-0 text-amber-500" />
+      ) : (
+        <Layout className="h-3.5 w-3.5 flex-shrink-0 text-violetx-500" />
+      )}
+      <span className="truncate">{board.title || 'Untitled'}</span>
+    </button>
+  );
+}
+
+/* ── Type picker (inline) ───────────────────────────────────────────────── */
+
+function TypePicker({ depth, onPick, onCancel, showFolder = false }) {
+  return (
+    <motion.div
+      initial={{ height: 0, opacity: 0 }}
+      animate={{ height: 'auto', opacity: 1 }}
+      exit={{ height: 0, opacity: 0 }}
+      transition={{ duration: 0.15 }}
+      className="overflow-hidden"
+    >
+      <div
+        className="flex flex-wrap items-center gap-1.5 py-1.5 pr-2"
+        style={{ paddingLeft: `${12 + (depth + 1) * 14 + 20}px` }}
+      >
+        <button
+          onClick={() => onPick('canvas')}
+          className="flex items-center gap-1.5 rounded-lg border border-ink-200 bg-white px-2.5 py-1 text-xs font-medium text-ink-600 transition hover:border-violetx-300 hover:text-violetx-700 dark:border-ink-700 dark:bg-ink-800 dark:text-ink-300 dark:hover:border-violetx-500/60 dark:hover:text-violetx-300"
+        >
+          <Layout className="h-3 w-3" />
+          Canvas
+        </button>
+        <button
+          onClick={() => onPick('note')}
+          className="flex items-center gap-1.5 rounded-lg border border-ink-200 bg-white px-2.5 py-1 text-xs font-medium text-ink-600 transition hover:border-amber-300 hover:text-amber-700 dark:border-ink-700 dark:bg-ink-800 dark:text-ink-300 dark:hover:border-amber-500/60 dark:hover:text-amber-300"
+        >
+          <FileText className="h-3 w-3" />
+          Note
+        </button>
+        {showFolder && (
+          <button
+            onClick={() => onPick('folder')}
+            className="flex items-center gap-1.5 rounded-lg border border-ink-200 bg-white px-2.5 py-1 text-xs font-medium text-ink-600 transition hover:border-emerald-300 hover:text-emerald-700 dark:border-ink-700 dark:bg-ink-800 dark:text-ink-300 dark:hover:border-emerald-500/60 dark:hover:text-emerald-300"
+          >
+            <FolderPlus className="h-3 w-3" />
+            Subfolder
+          </button>
+        )}
+        <button
+          onClick={onCancel}
+          className="rounded p-0.5 text-ink-400 transition hover:text-ink-700 dark:hover:text-ink-200"
+        >
+          <X className="h-3 w-3" />
+        </button>
+      </div>
+    </motion.div>
+  );
+}
+
 /* ── Folder row (recursive) ─────────────────────────────────────────────── */
 
 function FolderRow({
-  folder, folders, depth,
+  folder, folders, boards, depth,
   expandedIds, onToggleExpand,
   editingId, editingName, editInputRef, onEditStart, onEditChange, onEditCommit, onEditCancel,
   menuId, onMenuOpen, onMenuClose, onDelete,
   movePickerId, onMoveOpen, onMoveClose, onMove,
   creatingIn, newFolderName, newInputRef, onNewFolderStart, onNewFolderChange,
   onNewFolderCommit, onNewFolderCancel,
+  addingPageIn, onAddPage, onAddPageCancel, onQuickCreate,
 }) {
   const children = folders.filter((f) => f.parentId === folder.id);
-  const hasChildren = children.length > 0;
+  const folderBoards = boards.filter((b) => b.folderId === folder.id);
+  const hasChildren = children.length > 0 || folderBoards.length > 0;
   const expanded = expandedIds.has(folder.id);
   const isEditing = editingId === folder.id;
   const menuOpen = menuId === folder.id;
   const moveOpen = movePickerId === folder.id;
+  const isAddingHere = addingPageIn === folder.id;
 
   const indentPx = depth * 14;
 
@@ -356,7 +567,7 @@ function FolderRow({
           onClick={() => onToggleExpand(folder.id)}
           className="mr-1 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded text-ink-400 transition hover:text-ink-700 dark:hover:text-ink-100"
         >
-          {hasChildren || creatingIn === folder.id ? (
+          {hasChildren || creatingIn === folder.id || isAddingHere ? (
             <ChevronRight
               className={cn('h-3 w-3 transition-transform', expanded && 'rotate-90')}
             />
@@ -365,7 +576,7 @@ function FolderRow({
           )}
         </button>
 
-        {/* Folder icon */}
+        {/* Folder icon + name */}
         <NavLink
           to={`/?folderId=${folder.id}`}
           className="flex flex-1 items-center gap-2 truncate py-1.5 pr-1"
@@ -399,14 +610,29 @@ function FolderRow({
           )}
         </NavLink>
 
-        {/* "..." menu button */}
+        {/* Action buttons (visible on hover) */}
         {!isEditing && (
-          <button
-            onClick={(e) => { e.preventDefault(); onMenuOpen(folder.id); }}
-            className="flex-shrink-0 rounded p-1 text-ink-400 opacity-0 transition group-hover:opacity-100 hover:text-ink-700 dark:hover:text-ink-100"
-          >
-            <MoreHorizontal className="h-3.5 w-3.5" />
-          </button>
+          <div className="flex flex-shrink-0 items-center opacity-0 transition group-hover:opacity-100">
+            {/* "+" add page */}
+            <button
+              onClick={(e) => {
+                e.preventDefault();
+                onToggleExpand(folder.id);
+                onAddPage(folder.id);
+              }}
+              className="rounded p-1 text-ink-400 transition hover:text-ink-700 dark:hover:text-ink-100"
+              title="New page in folder"
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </button>
+            {/* "..." menu */}
+            <button
+              onClick={(e) => { e.preventDefault(); onMenuOpen(folder.id); }}
+              className="rounded p-1 text-ink-400 transition hover:text-ink-700 dark:hover:text-ink-100"
+            >
+              <MoreHorizontal className="h-3.5 w-3.5" />
+            </button>
+          </div>
         )}
 
         {/* Context menu */}
@@ -462,9 +688,22 @@ function FolderRow({
         )}
       </div>
 
-      {/* Children */}
-      {(expandedIds.has(folder.id) || creatingIn === folder.id) && (
+      {/* Children (when expanded) */}
+      {(expandedIds.has(folder.id) || creatingIn === folder.id || isAddingHere) && (
         <>
+          {/* Type picker for new page */}
+          <AnimatePresence>
+            {isAddingHere && (
+              <TypePicker
+                depth={depth}
+                showFolder
+                onPick={(type) => onQuickCreate(folder.id, type)}
+                onCancel={onAddPageCancel}
+              />
+            )}
+          </AnimatePresence>
+
+          {/* New subfolder input */}
           {creatingIn === folder.id && (
             <NewFolderInput
               ref={newInputRef}
@@ -475,11 +714,14 @@ function FolderRow({
               depth={depth + 1}
             />
           )}
+
+          {/* Sub-folders */}
           {children.map((child) => (
             <FolderRow
               key={child.id}
               folder={child}
               folders={folders}
+              boards={boards}
               depth={depth + 1}
               expandedIds={expandedIds}
               onToggleExpand={onToggleExpand}
@@ -505,7 +747,16 @@ function FolderRow({
               onNewFolderChange={onNewFolderChange}
               onNewFolderCommit={onNewFolderCommit}
               onNewFolderCancel={onNewFolderCancel}
+              addingPageIn={addingPageIn}
+              onAddPage={onAddPage}
+              onAddPageCancel={onAddPageCancel}
+              onQuickCreate={onQuickCreate}
             />
+          ))}
+
+          {/* Boards in this folder */}
+          {folderBoards.map((board) => (
+            <BoardItem key={board.id} board={board} depth={depth} />
           ))}
         </>
       )}
@@ -548,8 +799,6 @@ function MovePicker({ folder, folders, onMove, onClose }) {
 }
 
 /* ── New folder inline input ────────────────────────────────────────────── */
-
-import { forwardRef } from 'react';
 
 const NewFolderInput = forwardRef(function NewFolderInput(
   { value, onChange, onCommit, onCancel, depth },

@@ -6,6 +6,7 @@ import activityRoutes from './activity.routes.js';
 import uploadRoutes from './upload.routes.js';
 import exportRoutes from './export.routes.js';
 import aiRoutes from './ai.routes.js';
+import snippetRoutes from './snippet.routes.js';
 
 /**
  * API v1 router. All future versions can mount under /api/v2 etc.
@@ -21,5 +22,6 @@ router.use('/activity', activityRoutes);
 router.use('/uploads', uploadRoutes);
 router.use('/export', exportRoutes);
 router.use('/ai', aiRoutes);
+router.use('/snippets', snippetRoutes);
 
 export default router;

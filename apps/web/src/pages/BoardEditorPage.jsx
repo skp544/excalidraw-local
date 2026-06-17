@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 import { motion } from 'framer-motion';
 import {
   ArrowLeft, Download, Image as ImageIcon, FileJson, FileType,
-  Keyboard, Play, Sparkles, Star, Upload, Loader2,
+  Keyboard, Play, Sparkles, Star, Upload, Loader2, Terminal,
 } from 'lucide-react';
 
 import { Logo } from '@/components/ui/Logo.jsx';
@@ -16,6 +16,7 @@ import { PageTabs } from '@/components/editor/PageTabs.jsx';
 import { AutosaveBadge } from '@/components/editor/AutosaveBadge.jsx';
 import { ShortcutsPanel } from '@/components/editor/ShortcutsPanel.jsx';
 import { AISidebar } from '@/components/editor/AISidebar.jsx';
+import { CommandPanel } from '@/components/editor/CommandPanel.jsx';
 
 import {
   useBoard,
@@ -70,6 +71,7 @@ export function BoardEditorPage() {
   const [excalidrawApi, setExcalidrawApi] = useState(null);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
+  const [cmdPanelOpen, setCmdPanelOpen] = useState(false);
   const [presenting, setPresenting] = useState(false);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const fileInputRef = useRef(null);
@@ -83,15 +85,29 @@ export function BoardEditorPage() {
   // Presence — wired but invisible until a second peer joins.
   usePresence({ boardId, pageId: activePageId });
 
-  // Apply scene from server when the page changes.
+  // Tracks the last page we successfully loaded non-empty scene data for.
+  // Prevents background refetches from overwriting in-progress edits.
+  const sceneLoadedRef = useRef({ pageId: null, hasElements: false });
+
+  // Apply scene from server when the active page changes or when a background
+  // refetch resolves stale-empty cache into real data.
   useEffect(() => {
     if (!excalidrawApi || !activePage) return;
+    const elements = activePage.scene?.elements ?? [];
+
+    // Same page, already applied non-empty data → a background refetch fired
+    // while the user may be editing. Don't overwrite their work.
+    if (
+      sceneLoadedRef.current.pageId === activePageId &&
+      sceneLoadedRef.current.hasElements
+    ) return;
+
+    sceneLoadedRef.current = { pageId: activePageId, hasElements: elements.length > 0 };
+
     excalidrawApi.updateScene({
-      elements: activePage.scene?.elements ?? [],
+      elements,
       appState: {
         ...(activePage.scene?.appState ?? {}),
-        // The drawing canvas is always light + white so strokes stay
-        // legible regardless of the surrounding app theme.
         theme: 'light',
         viewBackgroundColor: '#FFFFFF',
         gridSize: null,
@@ -100,8 +116,7 @@ export function BoardEditorPage() {
       },
     });
     excalidrawApi.scrollToContent(undefined, { fitToContent: true, animate: false });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [excalidrawApi, activePageId]);
+  }, [excalidrawApi, activePageId, activePage]);
 
   const onDrawChange = useCallback(
     (elements, appState, files) => {
@@ -260,6 +275,18 @@ export function BoardEditorPage() {
           </button>
 
           <button
+            onClick={() => setCmdPanelOpen((v) => !v)}
+            className={cn(
+              'inline-flex items-center gap-1.5 rounded-xl border border-ink-200/70 bg-white/70 px-2.5 py-1.5 text-sm font-medium text-ink-700 shadow-soft transition hover:bg-white dark:border-ink-700/70 dark:bg-ink-900/60 dark:text-ink-200',
+              cmdPanelOpen && 'border-slate-400 bg-slate-50 text-slate-700 dark:border-slate-500/60 dark:bg-slate-500/10 dark:text-slate-200',
+            )}
+            title="Command Panel"
+          >
+            <Terminal className="h-4 w-4" />
+            Cmd
+          </button>
+
+          <button
             onClick={() => setShortcutsOpen(true)}
             className="grid h-9 w-9 place-items-center rounded-xl border border-ink-200/70 bg-white/70 text-ink-500 shadow-soft transition hover:bg-white dark:border-ink-700/70 dark:bg-ink-900/60 dark:text-ink-300"
             title="Keyboard shortcuts (?)"
@@ -397,6 +424,7 @@ export function BoardEditorPage() {
         )}
 
         <AISidebar open={aiOpen} onClose={() => setAiOpen(false)} excalidrawApi={excalidrawApi} />
+        <CommandPanel open={cmdPanelOpen} onClose={() => setCmdPanelOpen(false)} excalidrawApi={excalidrawApi} />
 
         {/* Presentation overlay */}
         {presenting && (

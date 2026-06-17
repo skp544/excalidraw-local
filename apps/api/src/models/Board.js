@@ -18,6 +18,8 @@ const BoardSchema = new mongoose.Schema(
     thumbnailUrl: { type: String, default: null },
     pageCount: { type: Number, default: 1 },
     lastOpenedAt: { type: Date, default: null },
+    pageType: { type: String, enum: ['canvas', 'note'], default: 'canvas' },
+    noteContent: { type: String, default: '' },
     /** Soft-delete safety net so accidental deletes can be restored. */
     deletedAt: { type: Date, default: null, index: true },
   },
@@ -34,6 +36,7 @@ BoardSchema.methods.toSummary = function toSummary() {
     title: this.title,
     description: this.description,
     mode: this.mode,
+    pageType: this.pageType ?? 'canvas',
     folderId: this.folderId ? this.folderId.toString() : null,
     tags: this.tags,
     isFavorite: this.isFavorite,

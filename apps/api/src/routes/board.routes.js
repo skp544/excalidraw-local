@@ -5,6 +5,7 @@ import {
   boardCreateSchema,
   boardListQuerySchema,
   boardUpdateSchema,
+  noteUpdateSchema,
   pageCreateSchema,
   pageUpdateSchema,
 } from '@excalidrow/shared/schemas';
@@ -14,6 +15,7 @@ import {
   duplicateBoard,
   getBoard,
   listBoards,
+  saveNoteContent,
   toggleFavorite,
   updateBoard,
   uploadBoardThumbnail,
@@ -39,6 +41,7 @@ router.get('/:id', getBoard);
 router.patch('/:id', validate({ body: boardUpdateSchema }), updateBoard);
 router.delete('/:id', deleteBoard);
 router.post('/:id/favorite', toggleFavorite);
+router.patch('/:id/note', validate({ body: noteUpdateSchema }), saveNoteContent);
 router.post('/:id/duplicate', duplicateBoard);
 router.post('/:id/thumbnail', uploadBoardThumbnail);
 
