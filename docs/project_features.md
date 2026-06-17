@@ -1,6 +1,6 @@
 ---
 name: project-features
-description: "Excalidrow implemented features, page types, and key model/route decisions"
+description: "Excalidrow implemented features, page types, sidebar, drag-and-drop, and key model/route decisions"
 metadata: 
   node_type: memory
   type: project
@@ -20,9 +20,25 @@ metadata:
 
 ## Sidebar file tree (added 2026-06-18)
 
-Sidebar shows boards inside their folders. Hover a folder → "+" button → TypePicker (Canvas | Note) → creates `Untitled` board in that folder and navigates. Root boards shown in "Root pages" section below folder tree.
+Obsidian-style sidebar shows boards inside their folders. Hover a folder → "+" → TypePicker (Canvas | Note | Subfolder) → creates `Untitled` board and navigates. Root boards shown in "Pages" section below folder tree. Drag-to-resize handle on right edge (180–520px, persisted to localStorage via `useUIStore`).
 
 `useBoardsAll()` fetches all boards with `pageSize: 500` (max bumped from 100 to 500 in `boardListQuerySchema`).
+
+## Sidebar Zustand store (`sidebar-store.js`, added 2026-06-18)
+
+All sidebar UI state lives in `apps/web/src/stores/sidebar-store.js` (Zustand). Replaces prop-drilling — FolderRow and BoardItem call `useSidebarStore()` directly.
+
+State slices: `expandedIds`, `editingId/Name`, `menuId`, `movePickerId`, `creatingIn/newFolderName`, `addingPageIn`, `draggingItem`, `dropTargetId`.
+
+**Why:** FolderRow previously had 24+ props passed down through recursive tree. User explicitly asked for Zustand over prop-drilling.
+
+## Drag-and-drop in sidebar workspace (added 2026-06-18)
+
+HTML5 drag-and-drop. Drag any `FolderRow` or `BoardItem` to:
+- Drop onto a **folder row** → moves it into that folder (highlights with `ring-1 ring-violetx-400/40`)
+- Drop onto **"Workspace" header** → moves to root (`folderId/parentId = null`)
+
+Safety: can't drop a folder into its own subtree (`getDescendantIds` check). Board or folder already in target → no-op. Custom drag ghost (dark pill label) via `makeDragGhost()`. Uses `useUpdateBoard` (`folderId`) and `useUpdateFolder` (`parentId`) mutations.
 
 ## Command snippet panel
 
