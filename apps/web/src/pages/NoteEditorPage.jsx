@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import {
-  ArrowLeft, Eye, Edit3, Moon, Sun, FileText, Check, Loader2,
-} from 'lucide-react';
+import { ArrowLeft, Moon, Sun, FileText, Check, Loader2 } from 'lucide-react';
+import toast from 'react-hot-toast';
 
-import { useBoard, useUpdateNoteContent } from '@/hooks/use-boards.js';
+import { useBoard, useUpdateNoteContent, useUpdateBoard } from '@/hooks/use-boards.js';
 import { useThemeStore } from '@/stores/theme-store.js';
 import { Logo } from '@/components/ui/Logo.jsx';
+import { apiError } from '@/lib/api.js';
 import { cn } from '@/lib/cn.js';
 
 /* ── Markdown renderer ────────────────────────────────────────────────────── */
@@ -28,7 +28,6 @@ function processInline(raw) {
 function mdToHtml(src) {
   if (!src) return '';
 
-  // 1. Protect code blocks
   const blocks = [];
   let text = src.replace(/```(\w*)\n?([\s\S]*?)```/gm, (_, lang, code) => {
     const esc = code
@@ -40,7 +39,6 @@ function mdToHtml(src) {
     return `\x00BLOCK${i}\x00`;
   });
 
-  // 2. Line-by-line block parsing
   const lines = text.split('\n');
   let html = '';
   let inUl = false;
@@ -104,6 +102,60 @@ function mdToHtml(src) {
   return html;
 }
 
+/* ── Block helpers ────────────────────────────────────────────────────────── */
+
+/** Splits note content into editable blocks — one per line, except fenced
+ * code blocks (```...```) which stay together as a single multi-line block. */
+function splitBlocks(text) {
+  if (!text) return [''];
+  const rawLines = text.split('\n');
+  const blocks = [];
+  let i = 0;
+  while (i < rawLines.length) {
+    const line = rawLines[i];
+    if (/^```/.test(line.trim())) {
+      let j = i + 1;
+      while (j < rawLines.length && !/^```/.test(rawLines[j].trim())) j++;
+      const end = j < rawLines.length ? j : j - 1;
+      blocks.push(rawLines.slice(i, end + 1).join('\n'));
+      i = end + 1;
+    } else {
+      blocks.push(line);
+      i += 1;
+    }
+  }
+  return blocks.length ? blocks : [''];
+}
+
+function blockTextClass(block) {
+  if (/^### /.test(block)) return 'text-xl font-semibold leading-snug';
+  if (/^## /.test(block)) return 'text-2xl font-semibold leading-snug';
+  if (/^# /.test(block)) return 'text-3xl font-bold leading-tight';
+  if (block.trim().startsWith('```')) {
+    return 'whitespace-pre rounded-xl bg-[#1e1e2e] p-5 font-mono text-sm leading-6 text-[#7ee787]';
+  }
+  return 'text-base leading-7';
+}
+
+const PROSE_CLASSES = cn(
+  '[&_h1]:mb-1 [&_h1]:text-3xl [&_h1]:font-bold [&_h1]:leading-tight',
+  '[&_h2]:mb-1 [&_h2]:text-2xl [&_h2]:font-semibold',
+  '[&_h3]:mb-1 [&_h3]:text-xl [&_h3]:font-semibold',
+  '[&_p]:leading-7',
+  '[&_ul]:list-disc [&_ul]:pl-6',
+  '[&_ol]:list-decimal [&_ol]:pl-6',
+  '[&_li]:leading-relaxed',
+  '[&_code]:rounded [&_code]:bg-ink-100 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-sm [&_code]:text-ink-700',
+  'dark:[&_code]:bg-ink-800 dark:[&_code]:text-[#7ee787]',
+  '[&_pre]:overflow-x-auto [&_pre]:rounded-xl [&_pre]:bg-[#1e1e2e] [&_pre]:p-5',
+  '[&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre_code]:font-mono [&_pre_code]:text-sm [&_pre_code]:text-[#7ee787]',
+  '[&_hr]:my-3 [&_hr]:border-ink-200 dark:[&_hr]:border-ink-700',
+  '[&_strong]:font-semibold',
+  '[&_em]:italic',
+  '[&_a]:text-violetx-600 [&_a]:underline hover:[&_a]:text-violetx-800',
+  'dark:[&_a]:text-violetx-400 dark:hover:[&_a]:text-violetx-200',
+);
+
 /* ── Page ─────────────────────────────────────────────────────────────────── */
 
 export function NoteEditorPage() {
@@ -111,6 +163,7 @@ export function NoteEditorPage() {
   const navigate = useNavigate();
   const { data, isLoading } = useBoard(id);
   const updateNote = useUpdateNoteContent();
+  const updateBoard = useUpdateBoard();
   const theme = useThemeStore((s) => s.theme);
   const cycleTheme = useThemeStore((s) => s.cycleTheme);
   const isDark =
@@ -120,21 +173,46 @@ export function NoteEditorPage() {
       window.matchMedia('(prefers-color-scheme: dark)').matches);
 
   const [content, setContent] = useState('');
-  const [viewMode, setViewMode] = useState('edit'); // 'edit' | 'preview'
+  const [activeBlock, setActiveBlock] = useState(null);
   const [saveState, setSaveState] = useState('idle'); // 'idle' | 'saving' | 'saved'
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleValue, setTitleValue] = useState('');
 
   const initializedRef = useRef(false);
   const saveTimerRef = useRef(null);
-  const textareaRef = useRef(null);
+  const activeRef = useRef(null);
+  const pendingCaretRef = useRef(null);
+  const titleInputRef = useRef(null);
 
   const board = data?.board;
+  const blocks = splitBlocks(content);
 
   useEffect(() => {
     if (board && !initializedRef.current) {
-      setContent(board.noteContent ?? '');
+      const initial = board.noteContent ?? '';
+      setContent(initial);
+      setActiveBlock(initial ? null : 0);
       initializedRef.current = true;
     }
   }, [board]);
+
+  useEffect(() => {
+    if (activeBlock === null) return;
+    const ta = activeRef.current;
+    if (!ta) return;
+    ta.focus();
+    const caret = pendingCaretRef.current;
+    pendingCaretRef.current = null;
+    const pos = caret ?? ta.value.length;
+    ta.selectionStart = ta.selectionEnd = pos;
+  }, [activeBlock]);
+
+  useEffect(() => {
+    if (editingTitle) {
+      titleInputRef.current?.focus();
+      titleInputRef.current?.select();
+    }
+  }, [editingTitle]);
 
   const triggerSave = useCallback(
     (text) => {
@@ -145,33 +223,91 @@ export function NoteEditorPage() {
           await updateNote.mutateAsync({ id, content: text });
           setSaveState('saved');
           setTimeout(() => setSaveState('idle'), 1800);
-        } catch {
+        } catch (err) {
           setSaveState('idle');
+          toast.error(apiError(err));
         }
       }, 1200);
     },
     [id, updateNote],
   );
 
-  const handleChange = (e) => {
-    const text = e.target.value;
-    setContent(text);
-    triggerSave(text);
+  const updateBlock = (idx, value) => {
+    const next = [...blocks];
+    next[idx] = value;
+    const newContent = next.join('\n');
+    setContent(newContent);
+    triggerSave(newContent);
   };
 
-  // Tab inserts 2 spaces
-  const handleKeyDown = (e) => {
+  const handleBlockKeyDown = (e, idx) => {
+    const block = blocks[idx];
+    const isFence = block.trim().startsWith('```');
+
+    if (e.key === 'Enter' && !isFence) {
+      e.preventDefault();
+      const pos = e.target.selectionStart;
+      const before = block.slice(0, pos);
+      const after = block.slice(pos);
+      const next = [...blocks];
+      next.splice(idx, 1, before, after);
+      const newContent = next.join('\n');
+      setContent(newContent);
+      triggerSave(newContent);
+      pendingCaretRef.current = 0;
+      setActiveBlock(idx + 1);
+      return;
+    }
+
+    if (e.key === 'Backspace' && e.target.selectionStart === 0 && e.target.selectionEnd === 0 && idx > 0) {
+      e.preventDefault();
+      const prev = blocks[idx - 1];
+      const next = [...blocks];
+      next.splice(idx - 1, 2, prev + block);
+      const newContent = next.join('\n');
+      setContent(newContent);
+      triggerSave(newContent);
+      pendingCaretRef.current = prev.length;
+      setActiveBlock(idx - 1);
+      return;
+    }
+
     if (e.key === 'Tab') {
       e.preventDefault();
-      const ta = textareaRef.current;
+      const ta = e.target;
       const start = ta.selectionStart;
       const end = ta.selectionEnd;
-      const newVal = content.slice(0, start) + '  ' + content.slice(end);
-      setContent(newVal);
-      triggerSave(newVal);
-      requestAnimationFrame(() => {
-        ta.selectionStart = ta.selectionEnd = start + 2;
-      });
+      const newVal = block.slice(0, start) + '  ' + block.slice(end);
+      updateBlock(idx, newVal);
+      requestAnimationFrame(() => { ta.selectionStart = ta.selectionEnd = start + 2; });
+      return;
+    }
+
+    if (e.key === 'Escape') {
+      setActiveBlock(null);
+    }
+  };
+
+  const appendBlock = () => {
+    const next = [...blocks, ''];
+    setContent(next.join('\n'));
+    pendingCaretRef.current = 0;
+    setActiveBlock(next.length - 1);
+  };
+
+  const startEditTitle = () => {
+    setTitleValue(board?.title || 'Untitled');
+    setEditingTitle(true);
+  };
+
+  const commitTitle = async () => {
+    setEditingTitle(false);
+    const name = titleValue.trim();
+    if (!name || name === board?.title) return;
+    try {
+      await updateBoard.mutateAsync({ id, title: name });
+    } catch (err) {
+      toast.error(apiError(err));
     }
   };
 
@@ -217,9 +353,27 @@ export function NoteEditorPage() {
 
         <div className="h-5 w-px bg-ink-200 dark:bg-ink-700" />
 
-        <h1 className="flex-1 truncate text-sm font-semibold text-ink-800 dark:text-ink-100">
-          {board?.title || 'Untitled'}
-        </h1>
+        {editingTitle ? (
+          <input
+            ref={titleInputRef}
+            value={titleValue}
+            onChange={(e) => setTitleValue(e.target.value)}
+            onBlur={commitTitle}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') commitTitle();
+              if (e.key === 'Escape') setEditingTitle(false);
+            }}
+            className="flex-1 truncate border-none bg-transparent text-sm font-semibold text-ink-800 outline-none dark:text-ink-100"
+          />
+        ) : (
+          <h1
+            onDoubleClick={startEditTitle}
+            title="Double-click to rename"
+            className="flex-1 cursor-text truncate text-sm font-semibold text-ink-800 dark:text-ink-100"
+          >
+            {board?.title || 'Untitled'}
+          </h1>
+        )}
 
         <span className="flex items-center gap-1 rounded-lg bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
           <FileText className="h-3 w-3" />
@@ -234,34 +388,6 @@ export function NoteEditorPage() {
           {saveState === 'saved' && <span className="text-emerald-600 dark:text-emerald-400">Saved</span>}
         </div>
 
-        {/* Edit / Preview toggle */}
-        <div className="flex items-center rounded-lg border border-ink-200/70 bg-ink-100/50 p-0.5 dark:border-ink-700/60 dark:bg-ink-800/50">
-          <button
-            onClick={() => { setViewMode('edit'); setTimeout(() => textareaRef.current?.focus(), 50); }}
-            className={cn(
-              'flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition',
-              viewMode === 'edit'
-                ? 'bg-white shadow-soft text-ink-800 dark:bg-ink-700 dark:text-ink-100'
-                : 'text-ink-500 hover:text-ink-700 dark:text-ink-400 dark:hover:text-ink-200',
-            )}
-          >
-            <Edit3 className="h-3 w-3" />
-            Write
-          </button>
-          <button
-            onClick={() => setViewMode('preview')}
-            className={cn(
-              'flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition',
-              viewMode === 'preview'
-                ? 'bg-white shadow-soft text-ink-800 dark:bg-ink-700 dark:text-ink-100'
-                : 'text-ink-500 hover:text-ink-700 dark:text-ink-400 dark:hover:text-ink-200',
-            )}
-          >
-            <Eye className="h-3 w-3" />
-            Preview
-          </button>
-        </div>
-
         <button
           onClick={cycleTheme}
           className="rounded-lg p-1.5 text-ink-500 transition hover:bg-ink-100 dark:hover:bg-ink-800"
@@ -271,54 +397,38 @@ export function NoteEditorPage() {
         </button>
       </header>
 
-      {/* ── Main ── */}
+      {/* ── Live markdown editor ── */}
       <div className="flex-1 overflow-y-auto">
-        {viewMode === 'edit' ? (
-          <textarea
-            ref={textareaRef}
-            value={content}
-            onChange={handleChange}
-            onKeyDown={handleKeyDown}
-            autoFocus
-            placeholder={`# My notes\n\nStart writing in Markdown...\n\nTips:\n- **Bold**, *italic*, \`inline code\`\n- \`\`\`code blocks\`\`\`\n- ## Headings, - lists`}
-            spellCheck
-            className={cn(
-              'h-full min-h-full w-full resize-none border-none px-[max(2rem,calc(50%-380px))] py-10',
-              'bg-white text-base leading-relaxed text-ink-800 outline-none',
-              'dark:bg-ink-950 dark:text-ink-100',
-              'font-[system-ui,sans-serif] placeholder:text-ink-300 dark:placeholder:text-ink-700',
-            )}
-          />
-        ) : (
-          <div
-            className={cn(
-              'min-h-full px-[max(2rem,calc(50%-380px))] py-10 text-ink-800 dark:text-ink-100',
-              // Heading sizes
-              '[&_h1]:mb-4 [&_h1]:mt-8 [&_h1]:text-3xl [&_h1]:font-bold [&_h1]:leading-tight',
-              '[&_h2]:mb-3 [&_h2]:mt-6 [&_h2]:text-2xl [&_h2]:font-semibold',
-              '[&_h3]:mb-2 [&_h3]:mt-5 [&_h3]:text-xl [&_h3]:font-semibold',
-              // Paragraphs
-              '[&_p]:mb-4 [&_p]:leading-7',
-              // Lists
-              '[&_ul]:mb-4 [&_ul]:list-disc [&_ul]:pl-6',
-              '[&_ol]:mb-4 [&_ol]:list-decimal [&_ol]:pl-6',
-              '[&_li]:mb-1 [&_li]:leading-relaxed',
-              // Code
-              '[&_code]:rounded [&_code]:bg-ink-100 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-sm [&_code]:text-ink-700',
-              'dark:[&_code]:bg-ink-800 dark:[&_code]:text-[#7ee787]',
-              // Code blocks
-              '[&_pre]:mb-4 [&_pre]:overflow-x-auto [&_pre]:rounded-xl [&_pre]:bg-[#1e1e2e] [&_pre]:p-5',
-              '[&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre_code]:font-mono [&_pre_code]:text-sm [&_pre_code]:text-[#7ee787]',
-              // Misc
-              '[&_hr]:my-6 [&_hr]:border-ink-200 dark:[&_hr]:border-ink-700',
-              '[&_strong]:font-semibold',
-              '[&_em]:italic',
-              '[&_a]:text-violetx-600 [&_a]:underline hover:[&_a]:text-violetx-800',
-              'dark:[&_a]:text-violetx-400 dark:hover:[&_a]:text-violetx-200',
-            )}
-            dangerouslySetInnerHTML={{ __html: mdToHtml(content) || '<p class="text-ink-300 dark:text-ink-700">Nothing to preview yet.</p>' }}
-          />
-        )}
+        <div className="mx-auto max-w-[760px] px-8 py-10">
+          {blocks.map((block, idx) =>
+            activeBlock === idx ? (
+              <textarea
+                key={idx}
+                ref={activeRef}
+                value={block}
+                onChange={(e) => updateBlock(idx, e.target.value)}
+                onKeyDown={(e) => handleBlockKeyDown(e, idx)}
+                onBlur={() => setActiveBlock(null)}
+                rows={block.split('\n').length}
+                spellCheck
+                placeholder={blocks.length === 1 && !block ? 'Start writing in Markdown…' : undefined}
+                className={cn(
+                  'block w-full resize-none overflow-hidden border-none bg-transparent p-0 outline-none',
+                  'text-ink-800 placeholder:text-ink-300 dark:text-ink-100 dark:placeholder:text-ink-700',
+                  blockTextClass(block),
+                )}
+              />
+            ) : (
+              <div
+                key={idx}
+                onClick={() => setActiveBlock(idx)}
+                className={cn('min-h-[1.75rem] cursor-text text-ink-800 dark:text-ink-100', PROSE_CLASSES)}
+                dangerouslySetInnerHTML={{ __html: mdToHtml(block) || '<p>&nbsp;</p>' }}
+              />
+            ),
+          )}
+          <div className="h-32 cursor-text" onClick={appendBlock} />
+        </div>
       </div>
     </div>
   );

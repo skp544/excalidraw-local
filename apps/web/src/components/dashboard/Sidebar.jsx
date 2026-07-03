@@ -575,8 +575,16 @@ function FolderRow({ folder, depth }) {
               <Plus className="h-3 w-3" />
             </button>
             <button
+              onClick={(e) => { e.preventDefault(); handleDelete(); }}
+              className="rounded p-1 text-ink-400 transition hover:text-rose-500 dark:hover:text-rose-400"
+              title="Delete folder"
+            >
+              <Trash2 className="h-3 w-3" />
+            </button>
+            <button
               onClick={(e) => { e.preventDefault(); openMenu(folder.id); }}
               className="rounded p-1 text-ink-400 transition hover:text-ink-600 dark:hover:text-ink-300"
+              title="More options"
             >
               <MoreHorizontal className="h-3 w-3" />
             </button>
